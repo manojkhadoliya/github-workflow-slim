@@ -1,0 +1,17 @@
+name: Nightly e2e
+
+# Thin shell calling reusable-node-setup.yml. Negative slimify example of a
+# different kind: the job has no `runs-on` of its own to migrate - the
+# runner is defined inside the called workflow instead.
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # 03:00 UTC nightly
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    name: Run Playwright suite
+    uses: ./.github/workflows/reusable-node-setup.yml
+    with:
+      node-version: "22"

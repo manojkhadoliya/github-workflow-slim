@@ -1,0 +1,11 @@
+{
+  "name": "github-workflow-slim",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reference GitHub Actions workflows, plus a slimify-audit workflow that migrates eligible jobs from ubuntu-latest to ubuntu-slim.",
+  "scripts": {
+    "lint": "echo \"(placeholder) no lint configured yet\" && exit 0",
+    "test": "echo \"(placeholder) no tests configured yet\" && exit 0",
+    "build": "echo \"(placeholder) no build configured yet\" && exit 0"
+  }
+}

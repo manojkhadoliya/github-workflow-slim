@@ -1,0 +1,131 @@
+name: Slimify audit
+
+# Scans every workflow in .github/workflows for jobs that can safely move
+# from `ubuntu-latest` to the 1 vCPU / 5 GB, container-based `ubuntu-slim`
+# runner, and opens a PR applying the safe migrations.
+#
+# Tool: https://github.com/fchimpan/gh-slimify
+#   - "safe"       -> auto-migrated by default
+#   - "warning"    -> only migrated when run with force: true
+#   - "ineligible" -> left untouched (Docker, services:, container:,
+#                     privileged ops, reusable-workflow calls, >15m runtime)
+
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Also migrate jobs flagged with warnings (missing commands / unknown duration)"
+        type: boolean
+        default: false
+  schedule:
+    - cron: "0 6 * * 1" # weekly, Monday 06:00 UTC
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan for migration candidates
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      actions: read # gh-slimify reads job durations via the Actions API
+    outputs:
+      total: ${{ steps.summary.outputs.total }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gh-slimify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh extension install fchimpan/gh-slimify
+
+      - name: Scan all workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh slimify --all --json > slimify-report.json
+
+      - name: Write job summary
+        id: summary
+        run: |
+          {
+            echo "### ubuntu-slim migration scan"
+            echo
+            jq -r '.summary | "- ✅ safe: **\(.safe)**\n- ⚠️ warning: **\(.warning)**\n- ❌ ineligible: **\(.ineligible)**\n- ⏭️ already slim: **\(.already_slim)**\n- **Total eligible: \(.total)**"' slimify-report.json
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "total=$(jq '.summary.total' slimify-report.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: slimify-report
+          path: slimify-report.json
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const { summary } = JSON.parse(fs.readFileSync('slimify-report.json', 'utf8'));
+            const body = [
+              '### 🩳 ubuntu-slim migration scan',
+              '',
+              `✅ safe: **${summary.safe}**  ⚠️ warning: **${summary.warning}**  ❌ ineligible: **${summary.ineligible}**  ⏭️ already slim: **${summary.already_slim}**`,
+              '',
+              summary.total > 0
+                ? `${summary.total} job(s) are eligible for migration. Run **Slimify audit** via workflow_dispatch to open a migration PR.`
+                : 'No jobs currently eligible for migration.',
+            ].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body.startsWith('### 🩳 ubuntu-slim migration scan'));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
+            }
+
+  migrate:
+    name: Open migration PR
+    needs: scan
+    if: github.event_name != 'pull_request' && needs.scan.outputs.total != '0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gh-slimify
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh extension install fchimpan/gh-slimify
+
+      - name: Migrate eligible workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh slimify fix --all ${{ inputs.force && '--force' || '' }}
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "ci: migrate eligible workflows to ubuntu-slim"
+          title: "ci: migrate eligible workflows to ubuntu-slim"
+          body: >-
+            Automated by the **Slimify audit** workflow using
+            [gh-slimify](https://github.com/fchimpan/gh-slimify). Jobs
+            classified as safe (and, if run with `force`, warning-flagged
+            jobs) were switched from `ubuntu-latest` to `ubuntu-slim`.
+            Verify each migrated job still passes before merging - `ubuntu-slim`
+            is a 1 vCPU / 5 GB unprivileged container with a hard 15-minute
+            timeout.
+          branch: chore/slimify-migration
+          labels: ci
+          delete-branch: true

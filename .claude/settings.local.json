@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//d/school-framework/.github/**)",
+      "Read(//d/school-framework/.github/workflows/**)",
+      "Bash(grep -ril \"slim\" \"D:\\\\school-framework\" 2>&1 | head -50)",
+      "Read(//d/school-framework/**)",
+      "Bash(grep -ril \"slimify\" \"D:\\\\school-framework\" \"D:\\\\github-workflow-slim\" 2>&1 | head -50)",
+      "WebSearch",
+      "Bash(gh api *)",
+      "Bash(gh --version)",
+      "Bash(gh auth *)",
+      "Bash(gh extension *)",
+      "Bash(git init *)",
+      "Bash(gh slimify *)",
+      "Read(//c/Users/Compro/AppData/Local/GitHub CLI/extensions/gh-slimify/**)",
+      "Bash(echo \"EXIT:$?\")"
+    ]
+  }
+}

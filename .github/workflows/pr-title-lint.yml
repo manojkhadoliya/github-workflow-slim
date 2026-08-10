@@ -1,0 +1,20 @@
+name: PR title lint
+
+# Enforces a Conventional Commits style PR title, e.g. "fix: handle empty input".
+# No checkout needed - the action only inspects the pull_request event payload.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize]
+
+permissions:
+  pull-requests: read
+
+jobs:
+  lint:
+    name: Check PR title
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
